@@ -22,23 +22,24 @@
 # THE SOFTWARE.
 # ------------------------------------------------------------------------------
 
-# Date: 01 February 2015
+# Date: 24 Jun 2019
 # Blender script
 # Description: Apply modifier and remove from the stack for object with shape keys
 # (Pushing 'Apply' button in 'Object modifiers' tab result in an error 'Modifier cannot be applied to a mesh with shape keys').
 
+import math
+import bpy
+from bpy.props import *
 bl_info = {
     "name":         "Apply modifier for object with shape keys",
     "author":       "Przemysław Bągard",
-    "blender":      (2,6,6),
-    "version":      (0,1,0),
+    "blender":      (2, 80, 0),
+    "version":      (0, 2, 4),
     "location":     "Context menu",
     "description":  "Apply modifier and remove from the stack for object with shape keys (Pushing 'Apply' button in 'Object modifiers' tab result in an error 'Modifier cannot be applied to a mesh with shape keys').",
     "category":     "Object Tools > Multi Shape Keys"
 }
 
-import bpy, math
-from bpy.props import *
 
 # Algorithm:
 # - Duplicate active object as many times as the number of shape keys
@@ -49,24 +50,27 @@ from bpy.props import *
 # - Delete all duplicated object except one
 # - Delete old object
 # - Restore name of object and object data
+
+
 def applyModifierForObjectWithShapeKeys(context, modifierName):
     list_names = []
     list = []
     list_shapes = []
     if context.object.data.shape_keys:
         list_shapes = [o for o in context.object.data.shape_keys.key_blocks]
-    
+
     if(list_shapes == []):
         bpy.ops.object.modifier_apply(apply_as='DATA', modifier=modifierName)
-        return context.scene.objects.active
-    
-    list.append(context.scene.objects.active)
+        return context.view_layer.objects.active
+
+    list.append(context.view_layer.objects.active)
     for i in range(1, len(list_shapes)):
-        bpy.ops.object.duplicate_move(OBJECT_OT_duplicate={"linked":False, "mode":'TRANSLATION'}, TRANSFORM_OT_translate={"value":(0, 0, 0), "constraint_axis":(False, False, False), "constraint_orientation":'GLOBAL', "mirror":False, "proportional":'DISABLED', "proportional_edit_falloff":'SMOOTH', "proportional_size":1, "snap":False, "snap_target":'CLOSEST', "snap_point":(0, 0, 0), "snap_align":False, "snap_normal":(0, 0, 0), "texture_space":False, "release_confirm":False})
-        list.append(context.scene.objects.active)
+        bpy.ops.object.duplicate_move(OBJECT_OT_duplicate={"linked": False, "mode": 'TRANSLATION'}, TRANSFORM_OT_translate={
+                                      "value": (0, 0, 0), "release_confirm": False})
+        list.append(context.view_layer.objects.active)
 
     for i, o in enumerate(list):
-        context.scene.objects.active = o
+        context.view_layer.objects.active = o
         list_names.append(o.data.shape_keys.key_blocks[i].name)
         for j in range(i+1, len(list))[::-1]:
             context.object.active_shape_key_index = j
@@ -76,77 +80,71 @@ def applyModifierForObjectWithShapeKeys(context, modifierName):
             bpy.ops.object.shape_key_remove()
         # last deleted shape doesn't change object shape
         context.object.active_shape_key_index = 0
-        # for some reason, changing to edit mode and return object mode fix problem with mesh change when deleting last shapekey
-        bpy.ops.object.editmode_toggle()
-        bpy.ops.object.editmode_toggle()
         bpy.ops.object.shape_key_remove()
         # time to apply modifiers
         bpy.ops.object.modifier_apply(apply_as='DATA', modifier=modifierName)
-    
+
     bpy.ops.object.select_all(action='DESELECT')
-    context.scene.objects.active = list[0]
-    list[0].select = True
+    context.view_layer.objects.active = list[0]
+    list[0].select_set(True)
     bpy.ops.object.shape_key_add(from_mix=False)
-    context.scene.objects.active.data.shape_keys.key_blocks[0].name = list_names[0]
+    context.view_layer.objects.active.data.shape_keys.key_blocks[0].name = list_names[0]
     for i in range(1, len(list)):
-        list[i].select = True
+        list[i].select_set(True)
         bpy.ops.object.join_shapes()
-        list[i].select = False
-        context.scene.objects.active.data.shape_keys.key_blocks[i].name = list_names[i]
-    
+        list[i].select_set(False)
+        context.view_layer.objects.active.data.shape_keys.key_blocks[i].name = list_names[i]
+
     bpy.ops.object.select_all(action='DESELECT')
     for o in list[1:]:
-        o.select = True
+        o.select_set(True)
 
     bpy.ops.object.delete(use_global=False)
-    context.scene.objects.active = list[0]
-    context.scene.objects.active.select = True
-    return context.scene.objects.active
+    context.view_layer.objects.active = list[0]
+    context.view_layer.objects.active.select_set(True)
+    return context.view_layer.objects.active
+
 
 class ApplyModifierForObjectWithShapeKeysOperator(bpy.types.Operator):
     bl_idname = "object.apply_modifier_for_object_with_shape_keys"
     bl_label = "Apply modifier for object with shape keys"
- 
+
     def item_list(self, context):
-        return [(modifier.name, modifier.name, modifier.name) for modifier in bpy.context.scene.objects.active.modifiers]
- 
-    my_enum = EnumProperty(name="Modifier name",
-        items = item_list)
- 
+        return [(modifier.name, modifier.name, modifier.name) for modifier in bpy.context.active_object.modifiers]
+
+    my_enum: EnumProperty(name="Modifier name",
+                           items=item_list)
+
     def execute(self, context):
-    
-        ob = context.scene.objects.active
+        ob = context.view_layer.objects.active
         bpy.ops.object.select_all(action='DESELECT')
-        context.scene.objects.active = ob
-        context.scene.objects.active.select = True
+        context.view_layer.objects.active = ob
+        context.view_layer.objects.active.select_set(True)
         applyModifierForObjectWithShapeKeys(context, self.my_enum)
-        
+
         return {'FINISHED'}
- 
+
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
-        
-bpy.utils.register_class(ApplyModifierForObjectWithShapeKeysOperator)
 
 
-class DialogPanel(bpy.types.Panel):
+class MESH_PT_ApplyModifierDialogPanel(bpy.types.Panel):
     bl_label = "Multi Shape Keys"
     bl_space_type = "VIEW_3D"
     bl_region_type = "TOOLS"
- 
+
     def draw(self, context):
-        self.layout.operator("object.apply_modifier_for_object_with_shape_keys")
- 
- 
+        self.layout.operator(
+            "object.apply_modifier_for_object_with_shape_keys")
+
+
 def menu_func(self, context):
-    self.layout.operator("object.apply_modifier_for_object_with_shape_keys", 
-        text="Apply modifier for object with shape keys")
- 
-def register():
-   bpy.utils.register_module(__name__)
- 
-def unregister():
-    bpy.utils.unregister_module(__name__)
- 
+    self.layout.operator("object.apply_modifier_for_object_with_shape_keys",
+                         text="Apply modifier for object with shape keys")
+
+
+register, unregister = bpy.utils.register_classes_factory(
+    (ApplyModifierForObjectWithShapeKeysOperator, MESH_PT_ApplyModifierDialogPanel))
+
 if __name__ == "__main__":
     register()
