@@ -34,7 +34,7 @@ bl_info = {
     "name":         "Apply modifier for object with shape keys",
     "author":       "Przemysław Bągard",
     "blender":      (2, 80, 0),
-    "version":      (0, 2, 4),
+    "version":      (0, 2, 5),
     "location":     "Context menu",
     "description":  "Apply modifier and remove from the stack for object with shape keys (Pushing 'Apply' button in 'Object modifiers' tab result in an error 'Modifier cannot be applied to a mesh with shape keys').",
     "category":     "Object Tools > Multi Shape Keys"
@@ -54,7 +54,7 @@ bl_info = {
 
 def applyModifierForObjectWithShapeKeys(context, modifierName):
     list_names = []
-    list = []
+    modifier_list = []
     list_shapes = []
     if context.object.data.shape_keys:
         list_shapes = [o for o in context.object.data.shape_keys.key_blocks]
@@ -63,16 +63,16 @@ def applyModifierForObjectWithShapeKeys(context, modifierName):
         bpy.ops.object.modifier_apply(apply_as='DATA', modifier=modifierName)
         return context.view_layer.objects.active
 
-    list.append(context.view_layer.objects.active)
+    modifier_list.append(context.view_layer.objects.active)
     for i in range(1, len(list_shapes)):
         bpy.ops.object.duplicate_move(OBJECT_OT_duplicate={"linked": False, "mode": 'TRANSLATION'}, TRANSFORM_OT_translate={
                                       "value": (0, 0, 0), "release_confirm": False})
-        list.append(context.view_layer.objects.active)
+        modifier_list.append(context.view_layer.objects.active)
 
-    for i, o in enumerate(list):
+    for i, o in enumerate(modifier_list):
         context.view_layer.objects.active = o
         list_names.append(o.data.shape_keys.key_blocks[i].name)
-        for j in range(i+1, len(list))[::-1]:
+        for j in range(i+1, len(modifier_list))[::-1]:
             context.object.active_shape_key_index = j
             bpy.ops.object.shape_key_remove()
         for j in range(0, i):
@@ -83,24 +83,24 @@ def applyModifierForObjectWithShapeKeys(context, modifierName):
         bpy.ops.object.shape_key_remove()
         # time to apply modifiers
         bpy.ops.object.modifier_apply(apply_as='DATA', modifier=modifierName)
-
+    # TODO: Safeguards -  If Edge Modifier, make sure angle is turned off, otherwise warn user First
     bpy.ops.object.select_all(action='DESELECT')
-    context.view_layer.objects.active = list[0]
-    list[0].select_set(True)
+    context.view_layer.objects.active = modifier_list[0]
+    modifier_list[0].select_set(True)
     bpy.ops.object.shape_key_add(from_mix=False)
     context.view_layer.objects.active.data.shape_keys.key_blocks[0].name = list_names[0]
-    for i in range(1, len(list)):
-        list[i].select_set(True)
+    for i in range(1, len(modifier_list)):
+        modifier_list[i].select_set(True)
         bpy.ops.object.join_shapes()
-        list[i].select_set(False)
+        modifier_list[i].select_set(False)
         context.view_layer.objects.active.data.shape_keys.key_blocks[i].name = list_names[i]
 
     bpy.ops.object.select_all(action='DESELECT')
-    for o in list[1:]:
+    for o in modifier_list[1:]:
         o.select_set(True)
 
     bpy.ops.object.delete(use_global=False)
-    context.view_layer.objects.active = list[0]
+    context.view_layer.objects.active = modifier_list[0]
     context.view_layer.objects.active.select_set(True)
     return context.view_layer.objects.active
 
